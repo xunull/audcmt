@@ -1,36 +1,184 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# audcmt
 
-## Getting Started
+audcmt 是一个本地运行的脚本安全审计工具。它可以下载 GitHub raw 脚本，调用用户配置的 LLM 接口分析风险，并生成带中文注释的脚本阅读版本，方便在执行第三方 `install.sh`、`setup.sh` 之前快速判断它做了什么。
 
-First, run the development server:
+## 功能
+
+- 输入脚本 URL 后自动下载脚本内容。
+- 使用 LLM 分析网络请求、Git 操作、遥测代码和危险模式。
+- 输出 `high`、`medium`、`low` 风险等级和可执行建议。
+- 生成逐行中文注释后的脚本，并使用 CodeMirror 展示。
+- 保存审计历史，支持分页查看和删除记录。
+- 在设置页配置 OpenAI-compatible 或 Anthropic/Claude-compatible 接口。
+- API Key 存储在系统 Keychain 中，非敏感设置和审计历史存储在本地 SQLite。
+- 支持大脚本截断策略，可配置最大行数、保留开头行数和保留结尾行数。
+
+## 技术栈
+
+- Next.js 16 App Router
+- React 19
+- Tailwind CSS 4
+- AI SDK
+- better-sqlite3
+- keytar
+- CodeMirror
+- Vitest
+
+## 本地数据
+
+应用会在当前系统用户目录下创建数据目录：
+
+```text
+~/.audcmt/audcmt.db
+```
+
+其中保存审计记录和非敏感设置。LLM API Key 不会写入 SQLite，而是通过 `keytar` 保存到系统 Keychain，服务名为 `audcmt`。
+
+## 快速开始
+
+安装依赖：
+
+```bash
+npm install
+```
+
+启动开发服务器：
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开浏览器访问：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+首次使用前，进入 `设置` 页面填写：
 
-## Learn More
+- API URL，例如 `https://api.openai.com/v1`
+- API Key
+- 模型名称，例如 `gpt-4o` 或 Claude 兼容接口对应的模型名
+- 脚本截断参数
 
-To learn more about Next.js, take a look at the following resources:
+保存前可以点击 `测试连接` 验证接口是否可用。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 使用流程
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. 打开首页 `审计`。
+2. 粘贴 GitHub raw 脚本地址，例如：
 
-## Deploy on Vercel
+   ```text
+   https://raw.githubusercontent.com/user/repo/main/install.sh
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+3. 点击 `开始审计`。
+4. 查看风险等级、网络操作、Git 操作、危险模式、遥测检测和总体建议。
+5. 阅读带中文注释的脚本内容。
+6. 在 `历史` 页面回看或删除审计记录。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 可用脚本
+
+```bash
+npm run dev
+```
+
+启动开发服务器。
+
+```bash
+npm run build
+```
+
+构建生产版本。
+
+```bash
+npm run start
+```
+
+启动生产服务器。
+
+```bash
+npm run lint
+```
+
+运行 ESLint。
+
+```bash
+npm run test
+npm run test:run
+```
+
+运行 Vitest 测试。
+
+## API 概览
+
+### `POST /api/audit`
+
+提交脚本 URL，下载脚本并调用 LLM 审计。
+
+请求体：
+
+```json
+{
+  "url": "https://raw.githubusercontent.com/user/repo/main/install.sh"
+}
+```
+
+返回审计 ID、风险摘要、带中文注释的脚本和是否截断。
+
+### `GET /api/audits`
+
+分页获取审计历史。
+
+查询参数：
+
+- `page`：页码，默认 `1`
+- `limit`：每页数量，默认 `20`，最大 `100`
+
+### `GET /api/audits/:id`
+
+获取单条审计记录详情。
+
+### `DELETE /api/audits/:id`
+
+删除单条审计记录。
+
+### `GET /api/settings`
+
+读取当前设置。返回值只包含是否已配置 API Key，不返回 API Key 明文。
+
+### `PUT /api/settings`
+
+保存 LLM 设置和截断策略。
+
+### `POST /api/test-connection`
+
+测试 LLM 接口连通性。
+
+## LLM 输出约定
+
+审计逻辑期望模型按以下结构返回：
+
+```text
+---ANALYSIS---
+{
+  "risk_level": "high|medium|low",
+  "network_ops": [],
+  "git_ops": [],
+  "telemetry": [],
+  "dangerous_patterns": [],
+  "risks": [],
+  "advice": ""
+}
+---SCRIPT---
+# 带中文注释的脚本内容
+```
+
+如果模型没有严格按格式返回，应用会尽量保留可展示的脚本文本，并在风险提示中标记解析异常。
+
+## 注意事项
+
+- audcmt 用于辅助审计，不应替代人工安全判断。
+- 请优先审计可信来源的 raw 脚本地址，不要把敏感私有脚本提交给不受信任的 LLM 服务。
+- `keytar` 和 `better-sqlite3` 是服务端原生依赖，已通过 `next.config.ts` 配置为 server external packages。
+- 当前应用会真实下载用户输入的 URL，请在受信任的本地环境中运行。
