@@ -110,6 +110,67 @@ npm run test:run
 
 运行 Vitest 测试。
 
+```bash
+npm run mcp
+```
+
+以 stdio 方式启动 MCP server（一般由 Claude Code 按需拉起，不用手动跑）。
+
+```bash
+npm run mcp:install
+```
+
+把 audcmt 注册到 Claude Code 的全局配置 `~/.claude.json`。
+
+## MCP 集成（Claude Code）
+
+audcmt 提供一个 stdio MCP server，让 Claude Code 直接调用脚本审计能力，无需打开浏览器。它与 Web UI 共享同一个 `~/.audcmt/audcmt.db`，两边的审计历史互通。
+
+### 安装
+
+在项目根目录运行：
+
+```bash
+npm install
+npm run mcp:install
+```
+
+`mcp:install` 会幂等地把下面这段写入 `~/.claude.json`（已有则更新 `cwd`，解析失败会中止并保留原文件，写入前自动备份到 `~/.claude.json.bak`）：
+
+```json
+{
+  "mcpServers": {
+    "audcmt": {
+      "type": "stdio",
+      "command": "npm",
+      "args": ["run", "mcp"],
+      "cwd": "/path/to/audcmt"
+    }
+  }
+}
+```
+
+也可以手动把上面这段加到 `~/.claude.json`。注册后重启 Claude Code 即可。
+
+> 使用前仍需先启动一次 Web 应用（`npm run dev`），在 `设置` 页配置好 LLM API URL、Key 和模型——MCP server 复用同一份配置（API Key 存在系统 Keychain）。
+
+### 可用工具
+
+| 工具 | 说明 |
+|------|------|
+| `audit_script(url)` | 下载并审计远程 https 脚本 |
+| `audit_local_file(path)` | 审计本地脚本文件 |
+| `check_risk_gate(url, maxRisk)` | 审计并判断风险是否超过阈值，返回 `pass` 布尔值 |
+| `get_audit(id)` | 查询单条审计记录 |
+| `list_audits(limit?)` | 列出最近的审计记录 |
+
+### 可用资源
+
+| 资源 URI | 说明 |
+|---------|------|
+| `audits://list` | 审计历史列表 |
+| `audits://{id}` | 单条审计详情 |
+
 ## API 概览
 
 ### `POST /api/audit`
